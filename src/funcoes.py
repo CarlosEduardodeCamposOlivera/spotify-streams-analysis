@@ -85,3 +85,60 @@ def renomear_colunas(df, mapeamento):
         Nova tabela com as colunas renomeadas.
     """
     return df.rename(columns=mapeamento)
+
+
+def converter_para_numerico(df, coluna):
+    """
+    Converte uma coluna para tipo numérico. Valores que não podem ser
+    convertidos viram NaN, e a quantidade deles é informada.
+
+    Parâmetros
+    ----------
+    df : pandas.DataFrame
+        Tabela original.
+    coluna : str
+        Nome da coluna a converter.
+
+    Retorna
+    -------
+    pandas.DataFrame
+        Nova tabela com a coluna convertida.
+    """
+    df = df.copy()
+    faltantes_antes = df[coluna].isna().sum()
+
+    df[coluna] = pd.to_numeric(df[coluna], errors="coerce")
+
+    novos_faltantes = df[coluna].isna().sum() - faltantes_antes
+    if novos_faltantes > 0:
+        print(
+            f"Aviso: {novos_faltantes} valor(es) de '{coluna}' não eram numéricos e viraram NaN.")
+
+    return df
+
+
+def preencher_faltantes(df, coluna, valor):
+    """
+    Preenche os valores faltantes de uma coluna com um valor fixo.
+
+    Parâmetros
+    ----------
+    df : pandas.DataFrame
+        Tabela original.
+    coluna : str
+        Nome da coluna a preencher.
+    valor : qualquer tipo
+        Valor usado no preenchimento.
+
+    Retorna
+    -------
+    pandas.DataFrame
+        Nova tabela com os faltantes da coluna preenchidos.
+    """
+    df = df.copy()
+    quantidade = df[coluna].isna().sum()
+
+    df[coluna] = df[coluna].fillna(valor)
+
+    print(f"{quantidade} valor(es) faltante(s) em '{coluna}' preenchido(s) com {valor!r}.")
+    return df
