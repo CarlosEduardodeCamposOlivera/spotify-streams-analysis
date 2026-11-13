@@ -37,3 +37,51 @@ def carregar_dados(caminho, encoding="utf-8"):
     df = pd.read_csv(caminho, encoding=encoding)
     print(f"Dados carregados: {df.shape[0]} linhas e {df.shape[1]} colunas.")
     return df
+
+
+def selecionar_colunas(df, colunas):
+    """
+    Seleciona um subconjunto de colunas de um DataFrame.
+
+    Parâmetros
+    ----------
+    df : pandas.DataFrame
+        Tabela original.
+    colunas : list of str
+        Nomes das colunas a manter, na ordem desejada.
+
+    Retorna
+    -------
+    pandas.DataFrame
+        Cópia da tabela contendo apenas as colunas pedidas.
+
+    Levanta
+    -------
+    KeyError
+        Se alguma coluna pedida não existir no DataFrame.
+    """
+    faltando = [coluna for coluna in colunas if coluna not in df.columns]
+    if faltando:
+        raise KeyError(f"Colunas não encontradas no DataFrame: {faltando}")
+
+    return df[colunas].copy()
+
+
+def renomear_colunas(df, mapeamento):
+    """
+    Renomeia colunas de um DataFrame.
+
+    Parâmetros
+    ----------
+    df : pandas.DataFrame
+        Tabela original.
+    mapeamento : dict
+        Dicionário no formato {"nome_antigo": "nome_novo"}. Colunas que
+        não aparecem no dicionário mantêm o nome.
+
+    Retorna
+    -------
+    pandas.DataFrame
+        Nova tabela com as colunas renomeadas.
+    """
+    return df.rename(columns=mapeamento)
