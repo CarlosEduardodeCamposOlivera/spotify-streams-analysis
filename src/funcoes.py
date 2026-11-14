@@ -241,3 +241,136 @@ def criar_coluna_data(df, col_ano, col_mes, col_dia, nome_nova="data_lancamento"
             f"Aviso: {invalidas} data(s) não puderam ser montadas e ficaram como NaT.")
 
     return df
+
+
+def corrigir_valores(df, coluna, condicao, novo_valor, motivo=""):
+    """
+    Substitui os valores de uma coluna, nas linhas que atendem a uma
+    condição, por um valor correto verificado em fonte externa.
+
+    Parâmetros
+    ----------
+    df : pandas.DataFrame
+        Tabela original.
+    coluna : str
+        Coluna cujos valores serão corrigidos.
+    condicao : pandas.Series de bool
+        Série com True nas linhas a corrigir (mesmo índice de df).
+    novo_valor : qualquer tipo
+        Valor correto.
+    motivo : str, opcional
+        Justificativa e fonte, exibidas na mensagem.
+
+    Retorna
+    -------
+    pandas.DataFrame
+        Nova tabela com os valores corrigidos.
+    """
+    df = df.copy()
+    quantidade = condicao.sum()
+
+    df.loc[condicao, coluna] = novo_valor
+
+    print(f"{quantidade} valor(es) de '{coluna}' corrigido(s) para {novo_valor!r}. {motivo}")
+    return df
+
+
+# ---------------------------------------------------------------------
+# Específicas para o dataset Spotify 2023:
+# ---------------------------------------------------------------------
+COLUNAS_SPOTIFY = [
+    "track_name", "artist(s)_name", "artist_count",
+    "released_year", "released_month", "released_day",
+    "streams", "in_spotify_playlists", "in_spotify_charts",
+    "bpm", "key", "mode",
+    "danceability_%", "valence_%", "energy_%", "acousticness_%",
+    "instrumentalness_%", "liveness_%", "speechiness_%",
+]
+
+NOVOS_NOMES = {
+    "artist(s)_name": "artist_name",
+    "danceability_%": "danceability",
+    "valence_%": "valence",
+    "energy_%": "energy",
+    "acousticness_%": "acousticness",
+    "instrumentalness_%": "instrumentalness",
+    "liveness_%": "liveness",
+    "speechiness_%": "speechiness",
+}
+
+
+def limpar_dados(df_bruto):
+    """
+    Aplica todas as etapas de limpeza do dataset Spotify 2023, na ordem
+    definida no notebook 02 (ver diagnóstico do notebook 01).
+
+    Parâmetros
+    ----------
+    df_bruto : pandas.DataFrame
+        Dataset original, como carregado do CSV.
+
+    Retorna
+    -------
+    pandas.DataFrame
+        Dataset limpo, com as colunas `data_lancamento` (datetime) e
+        `data_suspeita` (bool) adicionadas.
+    """
+    # Etapas 1 e 2: seleção e renomeação
+    df = selecionar_colunas(df_bruto, COLUNAS_SPOTIFY)
+    df = renomear_colunas(df, NOVOS_NOMES)
+
+    # Etapa 3: streams numérico e valor com erro de coleta
+    df = converter_para_numerico(df, "streams")
+    erro_streams = (
+        (df["track_name"] == "Que Vuelvas")
+        & (df["artist_name"] == "Carin Leon, Grupo Frontera")
+    )
+    df = marcar_como_faltante(df, "streams", erro_streams,
+                              motivo="Erro de coleta (Que Vuelvas).")
+
+    # Etapa 4: faltantes de key correspondem à nota C
+    df = preencher_faltantes(df, "key", "C")
+
+    # Etapa 5: duplicatas
+    df = remover_duplicatas(
+        df, ["track_name", "artist_name"], "in_spotify_playlists")
+
+    # Etapa 6: datas
+    ano_errado = (
+        df["track_name"].str.startswith("Agudo")
+        & df["artist_name"].str.contains("Styrx", regex=False)
+    )
+
+    fonte = "Fonte: página da faixa no Spotify."
+
+    df = corrigir_valores(df, "released_year", ano_errado, 2022, motivo=fonte)
+    df = corrigir_valores(df, "released_month", ano_errado, 10, motivo=fonte)
+    df = corrigir_valores(df, "released_day", ano_errado, 9, motivo=fonte)
+
+    df = criar_coluna_data(df, "released_year",
+                           "released_month", "released_day")
+    df["data_suspeita"] = (df["released_month"] == 1) & (
+        df["released_day"] == 1)
+
+    return df
+
+
+def salvar_dados(df, caminho):
+    """
+    Salva um DataFrame em CSV, preservando o índice original como a
+    coluna `id_original`.
+
+    Parâmetros
+    ----------
+    df : pandas.DataFrame
+        Tabela a salvar.
+    caminho : str
+        Caminho do arquivo de saída.
+
+    Retorna
+    -------
+    None
+    """
+    df.reset_index(names="id_original").to_csv(caminho, index=False)
+    print(
+        f"Dados salvos em {caminho}: {df.shape[0]} linhas e {df.shape[1]} colunas.")
