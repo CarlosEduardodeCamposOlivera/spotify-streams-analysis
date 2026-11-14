@@ -173,3 +173,35 @@ def marcar_como_faltante(df, coluna, condicao, motivo=""):
 
     print(f"{quantidade} valor(es) de '{coluna}' marcado(s) como faltante(s). {motivo}")
     return df
+
+
+def remover_duplicatas(df, chave, coluna_criterio):
+    """
+    Remove linhas duplicadas segundo uma chave, mantendo em cada grupo
+    a linha com o maior valor de uma coluna de critério.
+
+    Parâmetros
+    ----------
+    df : pandas.DataFrame
+        Tabela original.
+    chave : list of str
+        Colunas que definem uma duplicata (ex.: nome da música e artista).
+    coluna_criterio : str
+        Coluna usada para escolher a linha mantida (fica a de maior valor).
+
+    Retorna
+    -------
+    pandas.DataFrame
+        Nova tabela sem duplicatas, na ordem original das linhas.
+    """
+    linhas_antes = len(df)
+
+    df = (
+        df.sort_values(coluna_criterio, ascending=False, kind="stable")
+          .drop_duplicates(subset=chave, keep="first")
+          .sort_index()
+    )
+
+    removidas = linhas_antes - len(df)
+    print(f"{removidas} linha(s) duplicada(s) removida(s) (mantida a de maior '{coluna_criterio}').")
+    return df
