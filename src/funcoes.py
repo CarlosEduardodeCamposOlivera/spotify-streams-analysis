@@ -205,3 +205,39 @@ def remover_duplicatas(df, chave, coluna_criterio):
     removidas = linhas_antes - len(df)
     print(f"{removidas} linha(s) duplicada(s) removida(s) (mantida a de maior '{coluna_criterio}').")
     return df
+
+
+def criar_coluna_data(df, col_ano, col_mes, col_dia, nome_nova="data_lancamento"):
+    """
+    Cria uma coluna de data (datetime) a partir de colunas separadas de
+    ano, mês e dia. Combinações inválidas ou incompletas viram NaT.
+
+    Parâmetros
+    ----------
+    df : pandas.DataFrame
+        Tabela original.
+    col_ano, col_mes, col_dia : str
+        Nomes das colunas de ano, mês e dia.
+    nome_nova : str, opcional
+        Nome da nova coluna. Padrão: "data_lancamento".
+
+    Retorna
+    -------
+    pandas.DataFrame
+        Nova tabela com a coluna de data adicionada.
+    """
+    df = df.copy()
+
+    partes = df[[col_ano, col_mes, col_dia]].rename(columns={
+        col_ano: "year",
+        col_mes: "month",
+        col_dia: "day",
+    })
+    df[nome_nova] = pd.to_datetime(partes, errors="coerce")
+
+    invalidas = df[nome_nova].isna().sum()
+    if invalidas > 0:
+        print(
+            f"Aviso: {invalidas} data(s) não puderam ser montadas e ficaram como NaT.")
+
+    return df
