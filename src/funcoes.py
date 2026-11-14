@@ -5,6 +5,7 @@ Most Streamed Spotify Songs 2023 (Kaggle).
 
 import os
 import pandas as pd
+import numpy as np
 
 
 def carregar_dados(caminho, encoding="utf-8"):
@@ -141,4 +142,34 @@ def preencher_faltantes(df, coluna, valor):
     df[coluna] = df[coluna].fillna(valor)
 
     print(f"{quantidade} valor(es) faltante(s) em '{coluna}' preenchido(s) com {valor!r}.")
+    return df
+
+
+def marcar_como_faltante(df, coluna, condicao, motivo=""):
+    """
+    Substitui por NaN os valores de uma coluna nas linhas que atendem a uma
+    condição. Usado para invalidar valores identificados como erros.
+
+    Parâmetros
+    ----------
+    df : pandas.DataFrame
+        Tabela original.
+    coluna : str
+        Coluna cujos valores serão invalidados.
+    condicao : pandas.Series de bool
+        Série com True nas linhas a invalidar (mesmo índice de df).
+    motivo : str, opcional
+        Justificativa exibida na mensagem.
+
+    Retorna
+    -------
+    pandas.DataFrame
+        Nova tabela com os valores invalidados.
+    """
+    df = df.copy()
+    quantidade = condicao.sum()
+
+    df.loc[condicao, coluna] = np.nan
+
+    print(f"{quantidade} valor(es) de '{coluna}' marcado(s) como faltante(s). {motivo}")
     return df
