@@ -493,3 +493,47 @@ def plotar_barras_horizontais(serie, titulo, caminho=None):
         fig.savefig(caminho, bbox_inches="tight")
 
     return fig, ax
+
+
+def plotar_histograma(serie, bins, titulo, rotulo_x,
+                      rotulo_y="Número de músicas", caminho=None):
+    """
+    Desenha o histograma de uma variável numérica.
+
+    Parâmetros
+    ----------
+    serie : pandas.Series
+        Valores numéricos. Valores faltantes são ignorados.
+    bins : int ou sequência
+        Número de classes, ou a lista com os limites das classes.
+    titulo : str
+        Título do gráfico.
+    rotulo_x : str
+        Nome do eixo X (a variável e sua unidade).
+    rotulo_y : str, opcional
+        Nome do eixo Y. Padrão: "Número de músicas".
+    caminho : str, opcional
+        Se informado, salva a figura nesse caminho.
+
+    Retorna
+    -------
+    tuple
+        (fig, ax): a figura e os eixos do Matplotlib, para ajustes extras.
+    """
+    fig, ax = plt.subplots(figsize=(7, 4))
+
+    ax.hist(serie.dropna(), bins=bins, color=COR_PRINCIPAL,
+            edgecolor="white", linewidth=1)
+
+    ax.set_title(titulo, loc="left")
+    ax.set_xlabel(rotulo_x)
+    ax.set_ylabel(rotulo_y)
+    ax.grid(axis="y")
+    ax.set_axisbelow(True)
+
+    fig.tight_layout()
+
+    if caminho is not None:
+        fig.savefig(caminho, bbox_inches="tight")
+
+    return fig, ax
