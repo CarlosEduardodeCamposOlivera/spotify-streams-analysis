@@ -6,6 +6,7 @@ Most Streamed Spotify Songs 2023 (Kaggle).
 import os
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 def carregar_dados(caminho, encoding="utf-8"):
@@ -415,3 +416,80 @@ def contar_artistas(df, coluna, separador=", ", correcoes=None):
         artistas = artistas.replace(correcoes)
 
     return artistas.value_counts()
+
+
+# Cores dos gráficos (paleta única para todas as figuras do projeto)
+
+COR_PRINCIPAL = "#2a78d6"   # azul das barras
+COR_TEXTO = "#52514e"       # cinza escuro para textos e rótulos
+COR_GRADE = "#e1e0d9"       # cinza claro para linhas de grade
+COR_EIXO = "#c3c2b7"        # cinza médio para os eixos
+
+
+def configurar_estilo():
+    """
+    Define o estilo visual padrão de todos os gráficos do projeto.
+
+    Parâmetros
+    ----------
+    Nenhum.
+
+    Retorna
+    -------
+    None
+    """
+    plt.rcParams.update({
+        "figure.dpi": 110,
+        "savefig.dpi": 300,
+        "font.size": 10,
+        "axes.titlesize": 12,
+        "axes.titleweight": "bold",
+        "axes.edgecolor": COR_EIXO,
+        "axes.labelcolor": COR_TEXTO,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "xtick.color": COR_TEXTO,
+        "ytick.color": COR_TEXTO,
+        "grid.color": COR_GRADE,
+        "grid.linewidth": 0.8,
+    })
+
+
+def plotar_barras_horizontais(serie, titulo, caminho=None):
+    """
+    Desenha um gráfico de barras horizontais a partir de uma Series,
+    com o maior valor no topo e o valor escrito ao lado de cada barra.
+
+    Parâmetros
+    ----------
+    serie : pandas.Series
+        Valores a desenhar, já ordenados do maior para o menor
+        (ex.: resultado de value_counts). O índice vira o rótulo das barras.
+    titulo : str
+        Título do gráfico (deve indicar a unidade dos valores).
+    caminho : str, opcional
+        Se informado, salva a figura nesse caminho.
+
+    Retorna
+    -------
+    tuple
+        (fig, ax): a figura e os eixos do Matplotlib, para ajustes extras.
+    """
+    altura = 0.35 * len(serie) + 1
+    fig, ax = plt.subplots(figsize=(7, altura))
+
+    barras = ax.barh(serie.index[::-1], serie.values[::-1],
+                     color=COR_PRINCIPAL, height=0.7)
+    ax.bar_label(barras, padding=3, color=COR_TEXTO, fontsize=9)
+
+    ax.set_title(titulo, loc="left")
+    ax.xaxis.set_visible(False)
+    ax.spines["bottom"].set_visible(False)
+    ax.tick_params(axis="y", length=0)
+
+    fig.tight_layout()
+
+    if caminho is not None:
+        fig.savefig(caminho, bbox_inches="tight")
+
+    return fig, ax
