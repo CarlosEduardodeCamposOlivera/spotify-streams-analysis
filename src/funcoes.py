@@ -374,3 +374,44 @@ def salvar_dados(df, caminho):
     df.reset_index(names="id_original").to_csv(caminho, index=False)
     print(
         f"Dados salvos em {caminho}: {df.shape[0]} linhas e {df.shape[1]} colunas.")
+
+
+# ---------------------------------------------------------------------
+# Funções de análise descritiva
+# ---------------------------------------------------------------------
+
+def contar_artistas(df, coluna, separador=", ", correcoes=None):
+    """
+    Conta quantas vezes cada artista aparece, separando células que
+    contêm vários artistas.
+
+    Parâmetros
+    ----------
+    df : pandas.DataFrame
+        Tabela com os dados.
+    coluna : str
+        Coluna com os nomes dos artistas.
+    separador : str, opcional
+        Texto que separa os artistas dentro da célula. Padrão: ", ".
+    correcoes : dict, opcional
+        Dicionário {"nome_errado": "nome_correto"} aplicado antes da
+        contagem (ex.: nomes truncados). Padrão: nenhuma correção.
+
+    Retorna
+    -------
+    pandas.Series
+        Contagem por artista, do mais frequente para o menos frequente.
+        Nomes vazios são descartados.
+    """
+    artistas = (
+        df[coluna]
+        .str.split(separador)
+        .explode()
+        .str.strip()
+    )
+    artistas = artistas[artistas != ""]
+
+    if correcoes is not None:
+        artistas = artistas.replace(correcoes)
+
+    return artistas.value_counts()
