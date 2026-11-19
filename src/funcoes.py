@@ -496,7 +496,7 @@ def plotar_barras_horizontais(serie, titulo, caminho=None):
 
 
 def plotar_histograma(serie, bins, titulo, rotulo_x,
-                      rotulo_y="Número de músicas", caminho=None):
+                      rotulo_y="Número de músicas", escala_log=False, caminho=None):
     """
     Desenha o histograma de uma variável numérica.
 
@@ -512,6 +512,9 @@ def plotar_histograma(serie, bins, titulo, rotulo_x,
         Nome do eixo X (a variável e sua unidade).
     rotulo_y : str, opcional
         Nome do eixo Y. Padrão: "Número de músicas".
+    escala_log : bool, opcional
+        Se True, usa eixo X logarítmico com classes de largura logarítmica.
+        Valores menores ou iguais a zero são descartados (com aviso).
     caminho : str, opcional
         Se informado, salva a figura nesse caminho.
 
@@ -520,10 +523,26 @@ def plotar_histograma(serie, bins, titulo, rotulo_x,
     tuple
         (fig, ax): a figura e os eixos do Matplotlib, para ajustes extras.
     """
+    valores = serie.dropna()
+
+    if escala_log:
+        nao_positivos = (valores <= 0).sum()
+        if nao_positivos > 0:
+            print(
+                f"Aviso: {nao_positivos} valor(es) <= 0 descartado(s) (log não definido).")
+        valores = valores[valores > 0]
+
+        if isinstance(bins, int):
+            bins = np.logspace(np.log10(valores.min()),
+                               np.log10(valores.max()), bins + 1)
+
     fig, ax = plt.subplots(figsize=(7, 4))
 
-    ax.hist(serie.dropna(), bins=bins, color=COR_PRINCIPAL,
+    ax.hist(valores, bins=bins, color=COR_PRINCIPAL,
             edgecolor="white", linewidth=1)
+
+    if escala_log:
+        ax.set_xscale("log")
 
     ax.set_title(titulo, loc="left")
     ax.set_xlabel(rotulo_x)
@@ -537,3 +556,36 @@ def plotar_histograma(serie, bins, titulo, rotulo_x,
         fig.savefig(caminho, bbox_inches="tight")
 
     return fig, ax
+
+
+def analisar_descritiva(df, colunas):
+    """
+    Calcula estatísticas descritivas de colunas numéricas.
+
+    Parâmetros
+    ----------
+    df : pandas.DataFrame
+        Tabela com os dados.
+    colunas : list of str
+        Colunas numéricas a resumir.
+
+    Retorna
+    -------
+    pandas.DataFrame
+        Uma linha por coluna, com: n, média, mediana, desvio padrão,
+        mínimo, 1º quartil, 3º quartil, máximo e coeficiente de assimetria.
+        Valores faltantes são ignorados.
+    """
+    dados = df[colunas]
+
+    return pd.DataFrame({
+        "n": dados.count(),
+        "média": dados.mean(),
+        "mediana": dados.median(),
+        "desvio padrão": dados.std(),
+        "mínimo": dados.min(),
+        "Q1": dados.quantile(0.25),
+        "Q3": dados.quantile(0.75),
+        "máximo": dados.max(),
+        "assimetria": dados.skew(),
+    })
