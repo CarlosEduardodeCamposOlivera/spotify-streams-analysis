@@ -7,6 +7,7 @@ import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 def carregar_dados(caminho, encoding="utf-8"):
@@ -589,3 +590,119 @@ def analisar_descritiva(df, colunas):
         "máximo": dados.max(),
         "assimetria": dados.skew(),
     })
+
+
+def resumir_por_grupo(df, coluna_grupo, coluna_valor):
+    """
+    Calcula estatísticas de uma variável numérica para cada grupo.
+
+    Parâmetros
+    ----------
+    df : pandas.DataFrame
+        Tabela com os dados.
+    coluna_grupo : str
+        Coluna que define os grupos.
+    coluna_valor : str
+        Coluna numérica a resumir.
+
+    Retorna
+    -------
+    pandas.DataFrame
+        Uma linha por grupo, com n, mediana, Q1, Q3 e média.
+        Valores faltantes são ignorados.
+    """
+    grupos = df.groupby(coluna_grupo)[coluna_valor]
+
+    return pd.DataFrame({
+        "n": grupos.count(),
+        "mediana": grupos.median(),
+        "Q1": grupos.quantile(0.25),
+        "Q3": grupos.quantile(0.75),
+        "média": grupos.mean(),
+    })
+
+
+def plotar_boxplot(df, coluna_grupo, coluna_valor, ordem, titulo, rotulo_y,
+                   escala_log=False, caminho=None):
+    """
+    Desenha boxplots de uma variável numérica para cada grupo, lado a lado.
+    O tamanho de cada grupo (n) é mostrado abaixo do nome.
+
+    Parâmetros
+    ----------
+    df : pandas.DataFrame
+        Tabela com os dados.
+    coluna_grupo : str
+        Coluna que define os grupos (eixo X).
+    coluna_valor : str
+        Coluna numérica (eixo Y).
+    ordem : list
+        Ordem em que os grupos aparecem no eixo X.
+    titulo : str
+        Título do gráfico.
+    rotulo_y : str
+        Nome do eixo Y.
+    escala_log : bool, opcional
+        Se True, usa eixo Y logarítmico.
+    caminho : str, opcional
+        Se informado, salva a figura nesse caminho.
+
+    Retorna
+    -------
+    tuple
+        (fig, ax): a figura e os eixos do Matplotlib, para ajustes extras.
+    """
+    fig, ax = plt.subplots(figsize=(6, 4))
+
+    sns.boxplot(
+        data=df, x=coluna_grupo, y=coluna_valor, order=ordem,
+        color=COR_PRINCIPAL, width=0.5, linewidth=1, fliersize=3,
+        log_scale=escala_log, ax=ax,
+    )
+
+    contagens = df.groupby(coluna_grupo)[coluna_valor].count()
+    ax.set_xticks(range(len(ordem)))
+    ax.set_xticklabels(
+        [f"{grupo}\n(n = {contagens[grupo]})" for grupo in ordem])
+
+    ax.set_title(titulo, loc="left")
+    ax.set_xlabel("")
+    ax.set_ylabel(rotulo_y)
+    ax.grid(axis="y")
+    ax.set_axisbelow(True)
+
+    fig.tight_layout()
+
+    if caminho is not None:
+        fig.savefig(caminho, bbox_inches="tight")
+
+    return fig, ax
+
+
+def rotular_eixo_log_milhoes(ax, eixo="y"):
+    """
+    Substitui os rótulos de um eixo logarítmico em milhões (10^0, 10^1...)
+    por textos legíveis (1 mi, 10 mi, 100 mi, 1 bi).
+
+    Parâmetros
+    ----------
+    ax : matplotlib.axes.Axes
+        Eixos do gráfico.
+    eixo : str, opcional
+        "y" ou "x". Padrão: "y".
+
+    Retorna
+    -------
+    None
+    """
+    marcas = [1, 10, 100, 1000]
+    rotulos = ["1 mi", "10 mi", "100 mi", "1 bi"]
+
+    if eixo == "y":
+        ax.set_yticks(marcas)
+        ax.set_yticklabels(rotulos)
+    elif eixo == "x":
+        ax.set_xticks(marcas)
+        ax.set_xticklabels(rotulos)
+    else:
+        raise ValueError(f"eixo deve ser 'x' ou 'y', não {eixo!r}")
