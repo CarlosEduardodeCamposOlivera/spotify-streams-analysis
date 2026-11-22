@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from matplotlib.colors import LinearSegmentedColormap
 
 
 def carregar_dados(caminho, encoding="utf-8"):
@@ -426,6 +427,13 @@ COR_TEXTO = "#52514e"       # cinza escuro para textos e rótulos
 COR_GRADE = "#e1e0d9"       # cinza claro para linhas de grade
 COR_EIXO = "#c3c2b7"        # cinza médio para os eixos
 
+# Cores para a matriz de correlação
+
+COR_NEGATIVA = "#2a78d6"   # azul: correlação negativa
+COR_NEUTRA = "#f0efec"     # cinza claro: correlação próxima de zero
+COR_POSITIVA = "#e34948"   # vermelho: correlação positiva
+COR_DESTAQUE = "#eb6834"   # laranja: elementos de destaque sobre os pontos azuis
+
 
 def configurar_estilo():
     """
@@ -706,3 +714,155 @@ def rotular_eixo_log_milhoes(ax, eixo="y"):
         ax.set_xticklabels(rotulos)
     else:
         raise ValueError(f"eixo deve ser 'x' ou 'y', não {eixo!r}")
+
+
+def classificar_correlacao(rho):
+    """
+    Classifica um coeficiente de correlação pela força e pelo sentido.
+
+    Convenção: |rho| < 0,1 desprezível; < 0,3 fraca; < 0,5 moderada;
+    a partir de 0,5 forte.
+
+    Parâmetros
+    ----------
+    rho : float
+        Coeficiente de correlação, entre -1 e 1.
+
+    Retorna
+    -------
+    str
+        Classificação, ex.: "fraca positiva", "moderada negativa",
+        "desprezível".
+    """
+    intensidade = abs(rho)
+
+    if intensidade < 0.1:
+        return "desprezível"
+    elif intensidade < 0.3:
+        forca = "fraca"
+    elif intensidade < 0.5:
+        forca = "moderada"
+    else:
+        forca = "forte"
+
+    sentido = "positiva" if rho > 0 else "negativa"
+    return f"{forca} {sentido}"
+
+
+def plotar_heatmap(matriz, titulo, triangular=False, caminho=None):
+    """
+    Desenha uma matriz de correlação como mapa de calor, com escala
+    divergente (azul = negativa, cinza = zero, vermelho = positiva).
+
+    Parâmetros
+    ----------
+    matriz : pandas.DataFrame
+        Matriz de correlação.
+    titulo : str
+        Título do gráfico.
+    triangular : bool, opcional
+        Se True, mostra só a metade de baixo (para matrizes simétricas).
+    caminho : str, opcional
+        Se informado, salva a figura nesse caminho.
+
+    Retorna
+    -------
+    tuple
+        (fig, ax): a figura e os eixos do Matplotlib, para ajustes extras.
+    """
+    mapa_cores = LinearSegmentedColormap.from_list(
+        "divergente", [COR_NEGATIVA, COR_NEUTRA, COR_POSITIVA]
+    )
+    if triangular:
+        matriz = matriz.iloc[1:, :-1]
+        mascara = np.triu(np.ones_like(matriz, dtype=bool), k=1)
+    else:
+        mascara = None
+
+    largura = 0.6 * matriz.shape[1] + 2.5
+    altura = 0.5 * matriz.shape[0] + 1.5
+    fig, ax = plt.subplots(figsize=(largura, altura))
+
+    sns.heatmap(
+        matriz, mask=mascara, cmap=mapa_cores, vmin=-1, vmax=1, center=0,
+        annot=True, fmt=".2f", annot_kws={"size": 8},
+        linewidths=1, linecolor="white", square=triangular,
+        cbar_kws={"label": "ρ de Spearman", "shrink": 0.8}, ax=ax,
+    )
+
+    ax.set_title(titulo, loc="left")
+    ax.tick_params(length=0)
+
+    fig.tight_layout()
+
+    if caminho is not None:
+        fig.savefig(caminho, bbox_inches="tight")
+
+    return fig, ax
+
+
+def plotar_dispersao(ax, df, coluna_x, coluna_y, rotulo_x, rotulo_y,
+                     log_x=False, log_y=False):
+    """
+    Desenha um gráfico de dispersão em eixos já existentes.
+
+    Parâmetros
+    ----------
+    ax : matplotlib.axes.Axes
+        Eixos onde o gráfico será desenhado.
+    df : pandas.DataFrame
+        Tabela com os dados.
+    coluna_x, coluna_y : str
+        Colunas dos eixos X e Y.
+    rotulo_x, rotulo_y : str
+        Nomes dos eixos.
+    log_x, log_y : bool, opcional
+        Se True, usa escala logarítmica no eixo correspondente.
+
+    Retorna
+    -------
+    None
+    """
+    ax.scatter(df[coluna_x], df[coluna_y], s=14, alpha=0.5,
+               color=COR_PRINCIPAL, edgecolors="white", linewidths=0.3)
+
+    if log_x:
+        ax.set_xscale("log")
+    if log_y:
+        ax.set_yscale("log")
+
+    ax.set_xlabel(rotulo_x)
+    ax.set_ylabel(rotulo_y)
+    ax.grid(True)
+    ax.set_axisbelow(True)
+
+
+def adicionar_linha_medianas(ax, df, coluna_x, coluna_y, n_faixas=10):
+    """
+    Adiciona a um gráfico de dispersão uma linha que liga as medianas de
+    X e de Y em faixas de X com aproximadamente o mesmo número de pontos.
+    Resume a tendência sem supor uma forma (linear ou outra).
+
+    Parâmetros
+    ----------
+    ax : matplotlib.axes.Axes
+        Eixos do gráfico de dispersão.
+    df : pandas.DataFrame
+        Tabela com os dados.
+    coluna_x, coluna_y : str
+        Colunas dos eixos X e Y.
+    n_faixas : int, opcional
+        Número de faixas de X. Padrão: 10. Pode resultar em menos faixas
+        se houver muitos valores repetidos.
+
+    Retorna
+    -------
+    None
+    """
+    dados = df[[coluna_x, coluna_y]].dropna()
+
+    faixas = pd.qcut(dados[coluna_x], q=n_faixas, duplicates="drop")
+    medianas = dados.groupby(faixas, observed=True).median()
+
+    ax.plot(medianas[coluna_x], medianas[coluna_y], color=COR_DESTAQUE,
+            linewidth=2, marker="o", markersize=5, label="Mediana por faixa")
