@@ -435,6 +435,9 @@ COR_NEUTRA = "#f0efec"     # cinza claro: correlação próxima de zero
 COR_POSITIVA = "#e34948"   # vermelho: correlação positiva
 COR_DESTAQUE = "#eb6834"   # laranja: elementos de destaque sobre os pontos azuis
 
+PALETA_CATEGORICA = ["#2a78d6", "#eb6834",
+                     "#1baf7a", "#eda100", "#e87ba4", "#008300"]
+
 
 def configurar_estilo():
     """
@@ -935,3 +938,59 @@ def plotar_histogramas_grade(df, colunas, rotulos, bins, unidade="%", marcas_x=N
         fig.savefig(caminho, bbox_inches="tight")
 
     return fig, eixos
+
+
+def plotar_linhas(tabela, titulo, rotulo_y, cores, formato_rotulo="{:.0f}", mostrar_valores=True, caminho=None):
+    """
+    Desenha uma linha por coluna da tabela, com um ponto por linha da
+    tabela (eixo X categórico) e o valor escrito acima de cada ponto.
+
+    Parâmetros
+    ----------
+    tabela : pandas.DataFrame
+        Índice = categorias do eixo X (ex.: períodos); colunas = séries.
+    titulo : str
+        Título do gráfico.
+    rotulo_y : str
+        Nome do eixo Y.
+    cores : list of str
+        Uma cor por coluna, na mesma ordem.
+    formato_rotulo : str, opcional
+        Formato dos valores escritos nos pontos. Padrão: "{:.0f}".
+    mostrar_valores : bool, opcional
+        Se True, escreve o valor acima de cada ponto. Padrão: True.   
+    caminho : str, opcional
+        Se informado, salva a figura nesse caminho.
+
+
+    Retorna
+    -------
+    tuple
+        (fig, ax): a figura e os eixos do Matplotlib, para ajustes extras.
+    """
+    fig, ax = plt.subplots(figsize=(6, 4))
+    posicoes = list(range(len(tabela.index)))
+
+    for coluna, cor in zip(tabela.columns, cores):
+        ax.plot(posicoes, tabela[coluna], color=cor, linewidth=2,
+                marker="o", markersize=7, label=coluna)
+        if mostrar_valores:
+            for x, valor in zip(posicoes, tabela[coluna]):
+                ax.annotate(formato_rotulo.format(valor), (x, valor),
+                            textcoords="offset points", xytext=(0, 8),
+                            ha="center", fontsize=9, color=COR_TEXTO)
+
+    ax.set_xticks(posicoes)
+    ax.set_xticklabels(tabela.index)
+    ax.set_title(titulo, loc="left")
+    ax.set_ylabel(rotulo_y)
+    ax.legend(loc="best", frameon=False)
+    ax.grid(axis="y")
+    ax.set_axisbelow(True)
+
+    fig.tight_layout()
+
+    if caminho is not None:
+        fig.savefig(caminho, bbox_inches="tight")
+
+    return fig, ax
