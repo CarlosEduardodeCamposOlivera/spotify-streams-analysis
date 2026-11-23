@@ -6,6 +6,10 @@ Most Streamed Spotify Songs 2023 (Kaggle).
 import os
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from matplotlib.colors import LinearSegmentedColormap
+import math
 
 
 def carregar_dados(caminho, encoding="utf-8"):
@@ -374,3 +378,619 @@ def salvar_dados(df, caminho):
     df.reset_index(names="id_original").to_csv(caminho, index=False)
     print(
         f"Dados salvos em {caminho}: {df.shape[0]} linhas e {df.shape[1]} colunas.")
+
+
+# ---------------------------------------------------------------------
+# Funções de análise descritiva
+# ---------------------------------------------------------------------
+
+def contar_artistas(df, coluna, separador=", ", correcoes=None):
+    """
+    Conta quantas vezes cada artista aparece, separando células que
+    contêm vários artistas.
+
+    Parâmetros
+    ----------
+    df : pandas.DataFrame
+        Tabela com os dados.
+    coluna : str
+        Coluna com os nomes dos artistas.
+    separador : str, opcional
+        Texto que separa os artistas dentro da célula. Padrão: ", ".
+    correcoes : dict, opcional
+        Dicionário {"nome_errado": "nome_correto"} aplicado antes da
+        contagem (ex.: nomes truncados). Padrão: nenhuma correção.
+
+    Retorna
+    -------
+    pandas.Series
+        Contagem por artista, do mais frequente para o menos frequente.
+        Nomes vazios são descartados.
+    """
+    artistas = (
+        df[coluna]
+        .str.split(separador)
+        .explode()
+        .str.strip()
+    )
+    artistas = artistas[artistas != ""]
+
+    if correcoes is not None:
+        artistas = artistas.replace(correcoes)
+
+    return artistas.value_counts()
+
+
+# Cores dos gráficos (paleta única para todas as figuras do projeto)
+
+COR_PRINCIPAL = "#2a78d6"   # azul das barras
+COR_TEXTO = "#52514e"       # cinza escuro para textos e rótulos
+COR_GRADE = "#e1e0d9"       # cinza claro para linhas de grade
+COR_EIXO = "#c3c2b7"        # cinza médio para os eixos
+
+# Cores para a matriz de correlação
+
+COR_NEGATIVA = "#2a78d6"   # azul: correlação negativa
+COR_NEUTRA = "#f0efec"     # cinza claro: correlação próxima de zero
+COR_POSITIVA = "#e34948"   # vermelho: correlação positiva
+COR_DESTAQUE = "#eb6834"   # laranja: elementos de destaque sobre os pontos azuis
+
+PALETA_CATEGORICA = ["#2a78d6", "#eb6834",
+                     "#1baf7a", "#eda100", "#e87ba4", "#008300"]
+
+
+def configurar_estilo():
+    """
+    Define o estilo visual padrão de todos os gráficos do projeto.
+
+    Parâmetros
+    ----------
+    Nenhum.
+
+    Retorna
+    -------
+    None
+    """
+    plt.rcParams.update({
+        "figure.dpi": 110,
+        "savefig.dpi": 300,
+        "font.size": 10,
+        "axes.titlesize": 12,
+        "axes.titleweight": "bold",
+        "axes.edgecolor": COR_EIXO,
+        "axes.labelcolor": COR_TEXTO,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "xtick.color": COR_TEXTO,
+        "ytick.color": COR_TEXTO,
+        "grid.color": COR_GRADE,
+        "grid.linewidth": 0.8,
+    })
+
+
+def plotar_barras_horizontais(serie, titulo, caminho=None):
+    """
+    Desenha um gráfico de barras horizontais a partir de uma Series,
+    com o maior valor no topo e o valor escrito ao lado de cada barra.
+
+    Parâmetros
+    ----------
+    serie : pandas.Series
+        Valores a desenhar, já ordenados do maior para o menor
+        (ex.: resultado de value_counts). O índice vira o rótulo das barras.
+    titulo : str
+        Título do gráfico (deve indicar a unidade dos valores).
+    caminho : str, opcional
+        Se informado, salva a figura nesse caminho.
+
+    Retorna
+    -------
+    tuple
+        (fig, ax): a figura e os eixos do Matplotlib, para ajustes extras.
+    """
+    altura = 0.35 * len(serie) + 1
+    fig, ax = plt.subplots(figsize=(7, altura))
+
+    barras = ax.barh(serie.index[::-1], serie.values[::-1],
+                     color=COR_PRINCIPAL, height=0.7)
+    ax.bar_label(barras, padding=3, color=COR_TEXTO, fontsize=9)
+
+    ax.set_title(titulo, loc="left")
+    ax.xaxis.set_visible(False)
+    ax.spines["bottom"].set_visible(False)
+    ax.tick_params(axis="y", length=0)
+
+    fig.tight_layout()
+
+    if caminho is not None:
+        fig.savefig(caminho, bbox_inches="tight")
+
+    return fig, ax
+
+
+def plotar_histograma(serie, bins, titulo, rotulo_x,
+                      rotulo_y="Número de músicas", escala_log=False, caminho=None):
+    """
+    Desenha o histograma de uma variável numérica.
+
+    Parâmetros
+    ----------
+    serie : pandas.Series
+        Valores numéricos. Valores faltantes são ignorados.
+    bins : int ou sequência
+        Número de classes, ou a lista com os limites das classes.
+    titulo : str
+        Título do gráfico.
+    rotulo_x : str
+        Nome do eixo X (a variável e sua unidade).
+    rotulo_y : str, opcional
+        Nome do eixo Y. Padrão: "Número de músicas".
+    escala_log : bool, opcional
+        Se True, usa eixo X logarítmico com classes de largura logarítmica.
+        Valores menores ou iguais a zero são descartados (com aviso).
+    caminho : str, opcional
+        Se informado, salva a figura nesse caminho.
+
+    Retorna
+    -------
+    tuple
+        (fig, ax): a figura e os eixos do Matplotlib, para ajustes extras.
+    """
+    valores = serie.dropna()
+
+    if escala_log:
+        nao_positivos = (valores <= 0).sum()
+        if nao_positivos > 0:
+            print(
+                f"Aviso: {nao_positivos} valor(es) <= 0 descartado(s) (log não definido).")
+        valores = valores[valores > 0]
+
+        if isinstance(bins, int):
+            bins = np.logspace(np.log10(valores.min()),
+                               np.log10(valores.max()), bins + 1)
+
+    fig, ax = plt.subplots(figsize=(7, 4))
+
+    ax.hist(valores, bins=bins, color=COR_PRINCIPAL,
+            edgecolor="white", linewidth=1)
+
+    if escala_log:
+        ax.set_xscale("log")
+
+    ax.set_title(titulo, loc="left")
+    ax.set_xlabel(rotulo_x)
+    ax.set_ylabel(rotulo_y)
+    ax.grid(axis="y")
+    ax.set_axisbelow(True)
+
+    fig.tight_layout()
+
+    if caminho is not None:
+        fig.savefig(caminho, bbox_inches="tight")
+
+    return fig, ax
+
+
+def analisar_descritiva(df, colunas):
+    """
+    Calcula estatísticas descritivas de colunas numéricas.
+
+    Parâmetros
+    ----------
+    df : pandas.DataFrame
+        Tabela com os dados.
+    colunas : list of str
+        Colunas numéricas a resumir.
+
+    Retorna
+    -------
+    pandas.DataFrame
+        Uma linha por coluna, com: n, média, mediana, desvio padrão,
+        mínimo, 1º quartil, 3º quartil, máximo e coeficiente de assimetria.
+        Valores faltantes são ignorados.
+    """
+    dados = df[colunas]
+
+    return pd.DataFrame({
+        "n": dados.count(),
+        "média": dados.mean(),
+        "mediana": dados.median(),
+        "desvio padrão": dados.std(),
+        "mínimo": dados.min(),
+        "Q1": dados.quantile(0.25),
+        "Q3": dados.quantile(0.75),
+        "máximo": dados.max(),
+        "assimetria": dados.skew(),
+    })
+
+
+def resumir_por_grupo(df, coluna_grupo, coluna_valor):
+    """
+    Calcula estatísticas de uma variável numérica para cada grupo.
+
+    Parâmetros
+    ----------
+    df : pandas.DataFrame
+        Tabela com os dados.
+    coluna_grupo : str
+        Coluna que define os grupos.
+    coluna_valor : str
+        Coluna numérica a resumir.
+
+    Retorna
+    -------
+    pandas.DataFrame
+        Uma linha por grupo, com n, mediana, Q1, Q3 e média.
+        Valores faltantes são ignorados.
+    """
+    grupos = df.groupby(coluna_grupo)[coluna_valor]
+
+    return pd.DataFrame({
+        "n": grupos.count(),
+        "mediana": grupos.median(),
+        "Q1": grupos.quantile(0.25),
+        "Q3": grupos.quantile(0.75),
+        "média": grupos.mean(),
+    })
+
+
+def plotar_boxplot(df, coluna_grupo, coluna_valor, ordem, titulo, rotulo_y,
+                   escala_log=False, caminho=None):
+    """
+    Desenha boxplots de uma variável numérica para cada grupo, lado a lado.
+    O tamanho de cada grupo (n) é mostrado abaixo do nome.
+
+    Parâmetros
+    ----------
+    df : pandas.DataFrame
+        Tabela com os dados.
+    coluna_grupo : str
+        Coluna que define os grupos (eixo X).
+    coluna_valor : str
+        Coluna numérica (eixo Y).
+    ordem : list
+        Ordem em que os grupos aparecem no eixo X.
+    titulo : str
+        Título do gráfico.
+    rotulo_y : str
+        Nome do eixo Y.
+    escala_log : bool, opcional
+        Se True, usa eixo Y logarítmico.
+    caminho : str, opcional
+        Se informado, salva a figura nesse caminho.
+
+    Retorna
+    -------
+    tuple
+        (fig, ax): a figura e os eixos do Matplotlib, para ajustes extras.
+    """
+    fig, ax = plt.subplots(figsize=(6, 4))
+
+    sns.boxplot(
+        data=df, x=coluna_grupo, y=coluna_valor, order=ordem,
+        color=COR_PRINCIPAL, width=0.5, linewidth=1, fliersize=3,
+        log_scale=escala_log, ax=ax,
+    )
+
+    contagens = df.groupby(coluna_grupo)[coluna_valor].count()
+    ax.set_xticks(range(len(ordem)))
+    ax.set_xticklabels(
+        [f"{grupo}\n(n = {contagens[grupo]})" for grupo in ordem])
+
+    ax.set_title(titulo, loc="left")
+    ax.set_xlabel("")
+    ax.set_ylabel(rotulo_y)
+    ax.grid(axis="y")
+    ax.set_axisbelow(True)
+
+    fig.tight_layout()
+
+    if caminho is not None:
+        fig.savefig(caminho, bbox_inches="tight")
+
+    return fig, ax
+
+
+def rotular_eixo_log_milhoes(ax, eixo="y"):
+    """
+    Substitui os rótulos de um eixo logarítmico em milhões (10^0, 10^1...)
+    por textos legíveis (1 mi, 10 mi, 100 mi, 1 bi).
+
+    Parâmetros
+    ----------
+    ax : matplotlib.axes.Axes
+        Eixos do gráfico.
+    eixo : str, opcional
+        "y" ou "x". Padrão: "y".
+
+    Retorna
+    -------
+    None
+    """
+    marcas = [1, 10, 100, 1000]
+    rotulos = ["1 mi", "10 mi", "100 mi", "1 bi"]
+
+    if eixo == "y":
+        ax.set_yticks(marcas)
+        ax.set_yticklabels(rotulos)
+    elif eixo == "x":
+        ax.set_xticks(marcas)
+        ax.set_xticklabels(rotulos)
+    else:
+        raise ValueError(f"eixo deve ser 'x' ou 'y', não {eixo!r}")
+
+
+def classificar_correlacao(rho):
+    """
+    Classifica um coeficiente de correlação pela força e pelo sentido.
+
+    Convenção: |rho| < 0,1 desprezível; < 0,3 fraca; < 0,5 moderada;
+    a partir de 0,5 forte.
+
+    Parâmetros
+    ----------
+    rho : float
+        Coeficiente de correlação, entre -1 e 1.
+
+    Retorna
+    -------
+    str
+        Classificação, ex.: "fraca positiva", "moderada negativa",
+        "desprezível".
+    """
+    intensidade = abs(rho)
+
+    if intensidade < 0.1:
+        return "desprezível"
+    elif intensidade < 0.3:
+        forca = "fraca"
+    elif intensidade < 0.5:
+        forca = "moderada"
+    else:
+        forca = "forte"
+
+    sentido = "positiva" if rho > 0 else "negativa"
+    return f"{forca} {sentido}"
+
+
+def plotar_heatmap(matriz, titulo, triangular=False, caminho=None):
+    """
+    Desenha uma matriz de correlação como mapa de calor, com escala
+    divergente (azul = negativa, cinza = zero, vermelho = positiva).
+
+    Parâmetros
+    ----------
+    matriz : pandas.DataFrame
+        Matriz de correlação.
+    titulo : str
+        Título do gráfico.
+    triangular : bool, opcional
+        Se True, mostra só a metade de baixo (para matrizes simétricas).
+    caminho : str, opcional
+        Se informado, salva a figura nesse caminho.
+
+    Retorna
+    -------
+    tuple
+        (fig, ax): a figura e os eixos do Matplotlib, para ajustes extras.
+    """
+    mapa_cores = LinearSegmentedColormap.from_list(
+        "divergente", [COR_NEGATIVA, COR_NEUTRA, COR_POSITIVA]
+    )
+    if triangular:
+        matriz = matriz.iloc[1:, :-1]
+        mascara = np.triu(np.ones_like(matriz, dtype=bool), k=1)
+    else:
+        mascara = None
+
+    largura = 0.6 * matriz.shape[1] + 2.5
+    altura = 0.5 * matriz.shape[0] + 1.5
+    fig, ax = plt.subplots(figsize=(largura, altura))
+
+    sns.heatmap(
+        matriz, mask=mascara, cmap=mapa_cores, vmin=-1, vmax=1, center=0,
+        annot=True, fmt=".2f", annot_kws={"size": 8},
+        linewidths=1, linecolor="white", square=triangular,
+        cbar_kws={"label": "ρ de Spearman", "shrink": 0.8}, ax=ax,
+    )
+
+    ax.set_title(titulo, loc="left")
+    ax.tick_params(length=0)
+
+    fig.tight_layout()
+
+    if caminho is not None:
+        fig.savefig(caminho, bbox_inches="tight")
+
+    return fig, ax
+
+
+def plotar_dispersao(ax, df, coluna_x, coluna_y, rotulo_x, rotulo_y,
+                     log_x=False, log_y=False):
+    """
+    Desenha um gráfico de dispersão em eixos já existentes.
+
+    Parâmetros
+    ----------
+    ax : matplotlib.axes.Axes
+        Eixos onde o gráfico será desenhado.
+    df : pandas.DataFrame
+        Tabela com os dados.
+    coluna_x, coluna_y : str
+        Colunas dos eixos X e Y.
+    rotulo_x, rotulo_y : str
+        Nomes dos eixos.
+    log_x, log_y : bool, opcional
+        Se True, usa escala logarítmica no eixo correspondente.
+
+    Retorna
+    -------
+    None
+    """
+    ax.scatter(df[coluna_x], df[coluna_y], s=14, alpha=0.5,
+               color=COR_PRINCIPAL, edgecolors="white", linewidths=0.3)
+
+    if log_x:
+        ax.set_xscale("log")
+    if log_y:
+        ax.set_yscale("log")
+
+    ax.set_xlabel(rotulo_x)
+    ax.set_ylabel(rotulo_y)
+    ax.grid(True)
+    ax.set_axisbelow(True)
+
+
+def adicionar_linha_medianas(ax, df, coluna_x, coluna_y, n_faixas=10):
+    """
+    Adiciona a um gráfico de dispersão uma linha que liga as medianas de
+    X e de Y em faixas de X com aproximadamente o mesmo número de pontos.
+    Resume a tendência sem supor uma forma (linear ou outra).
+
+    Parâmetros
+    ----------
+    ax : matplotlib.axes.Axes
+        Eixos do gráfico de dispersão.
+    df : pandas.DataFrame
+        Tabela com os dados.
+    coluna_x, coluna_y : str
+        Colunas dos eixos X e Y.
+    n_faixas : int, opcional
+        Número de faixas de X. Padrão: 10. Pode resultar em menos faixas
+        se houver muitos valores repetidos.
+
+    Retorna
+    -------
+    None
+    """
+    dados = df[[coluna_x, coluna_y]].dropna()
+
+    faixas = pd.qcut(dados[coluna_x], q=n_faixas, duplicates="drop")
+    medianas = dados.groupby(faixas, observed=True).median()
+
+    ax.plot(medianas[coluna_x], medianas[coluna_y], color=COR_DESTAQUE,
+            linewidth=2, marker="o", markersize=5, label="Mediana por faixa")
+
+
+def plotar_histogramas_grade(df, colunas, rotulos, bins, unidade="%", marcas_x=None, n_colunas=2, titulo=None, caminho=None):
+    """
+    Desenha histogramas lado a lado (um por coluna), cada um com eixos
+    completos e uma linha tracejada na mediana, identificada na legenda.
+
+    Parâmetros
+    ----------
+    df : pandas.DataFrame
+        Tabela com os dados.
+    colunas : list of str
+        Colunas numéricas, uma por histograma.
+    rotulos : dict
+        Nome a exibir para cada coluna ({"coluna": "Nome"}).
+    bins : int ou sequência
+        Classes dos histogramas (as mesmas para todos).
+    unidade : str, opcional
+        Unidade mostrada no eixo X. Padrão: "%".
+    marcas_x : sequência, opcional
+        Posições das marcações do eixo X. Padrão: escolha automática.
+    n_colunas : int, opcional
+        Número de gráficos por linha. Padrão: 2.
+    titulo : str, opcional
+        Título geral da figura. Padrão: sem título geral.
+    caminho : str, opcional
+        Se informado, salva a figura nesse caminho.
+
+    Retorna
+    -------
+    tuple
+        (fig, eixos): a figura e a lista de eixos do Matplotlib.
+    """
+    n_linhas = math.ceil(len(colunas) / n_colunas)
+    fig, eixos = plt.subplots(n_linhas, n_colunas, squeeze=False,
+                              figsize=(6 * n_colunas, 4 * n_linhas))
+    eixos = eixos.flatten()
+
+    for ax, coluna in zip(eixos, colunas):
+        valores = df[coluna].dropna()
+        mediana = valores.median()
+
+        ax.hist(valores, bins=bins, color=COR_PRINCIPAL,
+                edgecolor="white", linewidth=1)
+        ax.axvline(mediana, color=COR_DESTAQUE, linewidth=1.5, linestyle="--",
+                   label=f"Mediana = {mediana:.0f}")
+
+        ax.set_title(rotulos[coluna], loc="left")
+        ax.set_xlabel(f"{rotulos[coluna]} ({unidade})")
+        ax.set_ylabel("Número de músicas")
+        if marcas_x is not None:
+            ax.set_xticks(marcas_x)
+        ax.legend(loc="best", frameon=False)
+        ax.grid(axis="y")
+        ax.set_axisbelow(True)
+
+    for ax in eixos[len(colunas):]:
+        ax.set_visible(False)
+
+    if titulo is not None:
+        fig.suptitle(titulo, x=0.01, ha="left", fontweight="bold")
+
+    fig.tight_layout()
+
+    if caminho is not None:
+        fig.savefig(caminho, bbox_inches="tight")
+
+    return fig, eixos
+
+
+def plotar_linhas(tabela, titulo, rotulo_y, cores, formato_rotulo="{:.0f}", mostrar_valores=True, caminho=None):
+    """
+    Desenha uma linha por coluna da tabela, com um ponto por linha da
+    tabela (eixo X categórico) e o valor escrito acima de cada ponto.
+
+    Parâmetros
+    ----------
+    tabela : pandas.DataFrame
+        Índice = categorias do eixo X (ex.: períodos); colunas = séries.
+    titulo : str
+        Título do gráfico.
+    rotulo_y : str
+        Nome do eixo Y.
+    cores : list of str
+        Uma cor por coluna, na mesma ordem.
+    formato_rotulo : str, opcional
+        Formato dos valores escritos nos pontos. Padrão: "{:.0f}".
+    mostrar_valores : bool, opcional
+        Se True, escreve o valor acima de cada ponto. Padrão: True.   
+    caminho : str, opcional
+        Se informado, salva a figura nesse caminho.
+
+
+    Retorna
+    -------
+    tuple
+        (fig, ax): a figura e os eixos do Matplotlib, para ajustes extras.
+    """
+    fig, ax = plt.subplots(figsize=(6, 4))
+    posicoes = list(range(len(tabela.index)))
+
+    for coluna, cor in zip(tabela.columns, cores):
+        ax.plot(posicoes, tabela[coluna], color=cor, linewidth=2,
+                marker="o", markersize=7, label=coluna)
+        if mostrar_valores:
+            for x, valor in zip(posicoes, tabela[coluna]):
+                ax.annotate(formato_rotulo.format(valor), (x, valor),
+                            textcoords="offset points", xytext=(0, 8),
+                            ha="center", fontsize=9, color=COR_TEXTO)
+
+    ax.set_xticks(posicoes)
+    ax.set_xticklabels(tabela.index)
+    ax.set_title(titulo, loc="left")
+    ax.set_ylabel(rotulo_y)
+    ax.legend(loc="best", frameon=False)
+    ax.grid(axis="y")
+    ax.set_axisbelow(True)
+
+    fig.tight_layout()
+
+    if caminho is not None:
+        fig.savefig(caminho, bbox_inches="tight")
+
+    return fig, ax
