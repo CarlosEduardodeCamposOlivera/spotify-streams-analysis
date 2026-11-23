@@ -9,6 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.colors import LinearSegmentedColormap
+import math
 
 
 def carregar_dados(caminho, encoding="utf-8"):
@@ -866,3 +867,71 @@ def adicionar_linha_medianas(ax, df, coluna_x, coluna_y, n_faixas=10):
 
     ax.plot(medianas[coluna_x], medianas[coluna_y], color=COR_DESTAQUE,
             linewidth=2, marker="o", markersize=5, label="Mediana por faixa")
+
+
+def plotar_histogramas_grade(df, colunas, rotulos, bins, unidade="%", marcas_x=None, n_colunas=2, titulo=None, caminho=None):
+    """
+    Desenha histogramas lado a lado (um por coluna), cada um com eixos
+    completos e uma linha tracejada na mediana, identificada na legenda.
+
+    Parâmetros
+    ----------
+    df : pandas.DataFrame
+        Tabela com os dados.
+    colunas : list of str
+        Colunas numéricas, uma por histograma.
+    rotulos : dict
+        Nome a exibir para cada coluna ({"coluna": "Nome"}).
+    bins : int ou sequência
+        Classes dos histogramas (as mesmas para todos).
+    unidade : str, opcional
+        Unidade mostrada no eixo X. Padrão: "%".
+    marcas_x : sequência, opcional
+        Posições das marcações do eixo X. Padrão: escolha automática.
+    n_colunas : int, opcional
+        Número de gráficos por linha. Padrão: 2.
+    titulo : str, opcional
+        Título geral da figura. Padrão: sem título geral.
+    caminho : str, opcional
+        Se informado, salva a figura nesse caminho.
+
+    Retorna
+    -------
+    tuple
+        (fig, eixos): a figura e a lista de eixos do Matplotlib.
+    """
+    n_linhas = math.ceil(len(colunas) / n_colunas)
+    fig, eixos = plt.subplots(n_linhas, n_colunas, squeeze=False,
+                              figsize=(6 * n_colunas, 4 * n_linhas))
+    eixos = eixos.flatten()
+
+    for ax, coluna in zip(eixos, colunas):
+        valores = df[coluna].dropna()
+        mediana = valores.median()
+
+        ax.hist(valores, bins=bins, color=COR_PRINCIPAL,
+                edgecolor="white", linewidth=1)
+        ax.axvline(mediana, color=COR_DESTAQUE, linewidth=1.5, linestyle="--",
+                   label=f"Mediana = {mediana:.0f}")
+
+        ax.set_title(rotulos[coluna], loc="left")
+        ax.set_xlabel(f"{rotulos[coluna]} ({unidade})")
+        ax.set_ylabel("Número de músicas")
+        if marcas_x is not None:
+            ax.set_xticks(marcas_x)
+        ax.legend(loc="best", frameon=False)
+        ax.grid(axis="y")
+        ax.set_axisbelow(True)
+
+    for ax in eixos[len(colunas):]:
+        ax.set_visible(False)
+
+    if titulo is not None:
+        fig.suptitle(titulo, x=0.01, ha="left", fontweight="bold")
+
+    fig.tight_layout()
+
+    if caminho is not None:
+        fig.savefig(caminho, bbox_inches="tight")
+
+    return fig, eixos
